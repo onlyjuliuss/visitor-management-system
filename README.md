@@ -97,5 +97,5 @@ This is a prototype/demo version. The following features are simulated:
 
 ## License
 
-© 2024 School Hostel Management System
+©onlyjuliuss
 
