@@ -351,9 +351,9 @@ func DeleteVisitor(ctx context.Context, id int) error {
 func GetVisitorStats(ctx context.Context) (*models.VisitorStats, error) {
 	const query = `
 		SELECT
-			COUNT(*) FILTER (WHERE DATE(sign_in_time) = CURRENT_DATE) as total_today,
-			COUNT(*) FILTER (WHERE DATE(sign_in_time) = CURRENT_DATE AND status = 'in') as signed_in,
-			COUNT(*) FILTER (WHERE DATE(sign_in_time) = CURRENT_DATE AND status = 'out') as signed_out
+			COUNT(*) FILTER (WHERE (sign_in_time AT TIME ZONE 'UTC')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date) as total_today,
+			COUNT(*) FILTER (WHERE (sign_in_time AT TIME ZONE 'UTC')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND status = 'in') as signed_in,
+			COUNT(*) FILTER (WHERE (sign_in_time AT TIME ZONE 'UTC')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND status = 'out') as signed_out
 		FROM visitors
 	`
 
