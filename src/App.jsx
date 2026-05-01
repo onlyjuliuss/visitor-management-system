@@ -18,8 +18,16 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/sign-in/success/:id" element={<SignInSuccess />} />
-        <Route path="/sign-out" element={<SignOutPage />} />
+        <Route path="/sign-out" element={<Navigate to="/admin/login" replace />} />
         <Route path="/admin/login" element={<AdminLogin />} />
+        <Route 
+          path="/admin/sign-out-desk" 
+          element={
+            <ProtectedRoute>
+              <SignOutPage />
+            </ProtectedRoute>
+          } 
+        />
         <Route 
           path="/admin" 
           element={

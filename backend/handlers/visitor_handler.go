@@ -64,15 +64,58 @@ func VisitorSignInHandler(w http.ResponseWriter, r *http.Request) {
 	visitor, err := services.CreateVisitor(r.Context(), req)
 	if err != nil {
 		log.Println("sign-in create visitor error:", err)
+		if strings.Contains(err.Error(), "phone validation") {
+			http.Error(w, "invalid phone number. Use 055..., 233..., or +233...", http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "could not create visitor", http.StatusInternalServerError)
 		return
 	}
+
+	// Send welcome SMS (non-blocking for UX).
+	// If Twilio is not configured or sending fails, we log it but do not fail sign-in.
+	go func(phone string) {
+		if err := services.SendSMS(phone, "Welcome to the hostel. Please remember to sign out before leaving."); err != nil {
+			log.Println("[SMS] welcome SMS failed:", err)
+		}
+	}(phone)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(visitor); err != nil {
 		log.Println("sign-in encode response error:", err)
 	}
+}
+
+// SendReminderHandler handles POST /api/visitors/send-reminder
+// Body: { "phone": "+123..." }
+func SendReminderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	req.Phone = strings.TrimSpace(req.Phone)
+	if req.Phone == "" {
+		http.Error(w, "phone is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := services.SendSignOutReminder(req.Phone); err != nil {
+		log.Println("[SMS] reminder send failed:", err)
+		http.Error(w, "could not send reminder", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // VisitorSignOutHandler handles POST /api/visitors/sign-out
@@ -92,28 +135,37 @@ func VisitorSignOutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[SIGN-OUT] Request body - ID: %d\n", req.ID)
+	log.Printf("[SIGN-OUT] Request body - ID: %d, QR: %s\n", req.ID, req.QRCode)
 
-	if req.ID <= 0 {
-		log.Printf("[SIGN-OUT] Invalid ID: %d (must be > 0)\n", req.ID)
-		http.Error(w, "id is required and must be > 0", http.StatusBadRequest)
+	var (
+		visitor *models.Visitor
+		err     error
+	)
+
+	// Allow sign-out by QR code (preferred) or by ID.
+	if strings.TrimSpace(req.QRCode) != "" {
+		log.Printf("[SIGN-OUT] Calling SignOutVisitorByQRCode with QR: %s\n", req.QRCode)
+		visitor, err = services.SignOutVisitorByQRCode(r.Context(), strings.TrimSpace(req.QRCode))
+	} else if req.ID > 0 {
+		log.Printf("[SIGN-OUT] Calling SignOutVisitor with ID: %d\n", req.ID)
+		visitor, err = services.SignOutVisitor(r.Context(), req.ID)
+	} else {
+		http.Error(w, "provide either qr_code or id", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("[SIGN-OUT] Calling SignOutVisitor with ID: %d\n", req.ID)
-	visitor, err := services.SignOutVisitor(r.Context(), req.ID)
 	if err != nil {
 		switch err {
 		case services.ErrNotFound:
-			log.Printf("[SIGN-OUT] Visitor not found - ID: %d\n", req.ID)
+			log.Printf("[SIGN-OUT] Visitor not found - ID: %d, QR: %s\n", req.ID, req.QRCode)
 			http.Error(w, "visitor not found", http.StatusNotFound)
 			return
 		case services.ErrAlreadySignedOut:
-			log.Printf("[SIGN-OUT] Visitor already signed out - ID: %d\n", req.ID)
+			log.Printf("[SIGN-OUT] Visitor already signed out - ID: %d, QR: %s\n", req.ID, req.QRCode)
 			http.Error(w, "visitor already signed out", http.StatusBadRequest)
 			return
 		default:
-			log.Printf("[SIGN-OUT] Service error - ID: %d, Error: %v\n", req.ID, err)
+			log.Printf("[SIGN-OUT] Service error - ID: %d, QR: %s, Error: %v\n", req.ID, req.QRCode, err)
 			http.Error(w, "could not sign out visitor", http.StatusInternalServerError)
 			return
 		}

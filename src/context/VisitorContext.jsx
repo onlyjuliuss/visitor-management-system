@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { apiUrl } from '../lib/api'
 
 const VisitorContext = createContext()
 
@@ -13,10 +14,24 @@ export function VisitorProvider({ children }) {
 
   const fetchAllVisitors = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/visitors')
+      const response = await fetch(apiUrl('/api/visitors'))
       if (response.ok) {
         const data = await response.json()
-        setVisitors(data.visitors || [])
+        // Transform snake_case from backend to camelCase for frontend
+        const transformedVisitors = (data.visitors || []).map(v => ({
+          id: v.id,
+          fullName: v.full_name,
+          phone: v.phone,
+          email: v.email,
+          purpose: v.purpose,
+          hostName: v.host_name,
+          signInTime: v.sign_in_time,
+          signOutTime: v.sign_out_time,
+          photoURL: v.photo_url,
+          qrCode: v.qr_code,
+          status: v.status
+        }))
+        setVisitors(transformedVisitors)
       }
     } catch (err) {
       console.error('Failed to fetch visitors:', err)
@@ -28,9 +43,23 @@ export function VisitorProvider({ children }) {
 
   const getVisitorById = async (id) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/visitors/${id}`)
+      const response = await fetch(apiUrl(`/api/visitors/${id}`))
       if (response.ok) {
-        return await response.json()
+        const v = await response.json()
+        // Transform snake_case from backend to camelCase for frontend
+        return {
+          id: v.id,
+          fullName: v.full_name,
+          phone: v.phone,
+          email: v.email,
+          purpose: v.purpose,
+          hostName: v.host_name,
+          signInTime: v.sign_in_time,
+          signOutTime: v.sign_out_time,
+          photoURL: v.photo_url,
+          qrCode: v.qr_code,
+          status: v.status
+        }
       }
     } catch (err) {
       console.error('Failed to fetch visitor:', err)
@@ -38,25 +67,61 @@ export function VisitorProvider({ children }) {
     return null
   }
 
-  const signOutVisitor = async (visitorId) => {
+  // signOutVisitor supports:
+  // - signOutVisitor(123)
+  // - signOutVisitor({ id: 123 })
+  // - signOutVisitor({ qr_code: "V-..." }) or signOutVisitor({ qrCode: "V-..." })
+  const signOutVisitor = async (payload) => {
     try {
-      const response = await fetch('http://localhost:8080/api/visitors/sign-out', {
+      let bodyObj = {}
+      if (typeof payload === 'number') {
+        bodyObj = { id: payload }
+      } else if (typeof payload === 'string') {
+        bodyObj = { qr_code: payload }
+      } else if (payload && typeof payload === 'object') {
+        if (payload.id) bodyObj.id = payload.id
+        if (payload.qr_code) bodyObj.qr_code = payload.qr_code
+        if (payload.qrCode) bodyObj.qr_code = payload.qrCode
+      }
+
+      const response = await fetch(apiUrl('/api/visitors/sign-out'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ id: visitorId }),
+        body: JSON.stringify(bodyObj),
       })
+
+      if (!response.ok) {
+        const errorText = (await response.text()) || 'Failed to sign out visitor'
+        return { success: false, error: errorText.trim() }
+      }
+
       if (response.ok) {
-        const updatedVisitor = await response.json()
+        const v = await response.json()
+        // Transform snake_case from backend to camelCase for frontend
+        const updatedVisitor = {
+          id: v.id,
+          fullName: v.full_name,
+          phone: v.phone,
+          email: v.email,
+          purpose: v.purpose,
+          hostName: v.host_name,
+          signInTime: v.sign_in_time,
+          signOutTime: v.sign_out_time,
+          photoURL: v.photo_url,
+          qrCode: v.qr_code,
+          status: v.status
+        }
         // Update local state
-        setVisitors(prev => prev.map(v => v.id === visitorId ? updatedVisitor : v))
-        return updatedVisitor
+        setVisitors(prev => prev.map(visitor => visitor.id === updatedVisitor.id ? updatedVisitor : visitor))
+        return { success: true, visitor: updatedVisitor }
       }
     } catch (err) {
       console.error('Failed to sign out visitor:', err)
+      return { success: false, error: 'Network error while signing out visitor' }
     }
-    return null
+    return { success: false, error: 'Failed to sign out visitor' }
   }
 
   const getCurrentlySignedIn = () => {
@@ -70,7 +135,7 @@ export function VisitorProvider({ children }) {
   const getWeeklyTotal = () => {
     const weekAgo = new Date()
     weekAgo.setDate(weekAgo.getDate() - 7)
-    return visitors.filter(v => new Date(v.sign_in_time) >= weekAgo).length
+    return visitors.filter(v => new Date(v.signInTime) >= weekAgo).length
   }
 
   const logoutAdmin = () => {

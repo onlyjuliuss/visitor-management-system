@@ -13,6 +13,10 @@
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
+.page-brand-logo {
+  margin-bottom: 1rem;
+}
+
 .page-header {
   display: flex;
   align-items: flex-start;
@@ -84,6 +88,82 @@
 .qr-scan-button svg {
   width: 24px;
   height: 24px;
+}
+
+.scan-error {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+
+.signout-feedback {
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.signout-feedback.success {
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+}
+
+.signout-feedback.error {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.scanner-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.scanner-controls label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.scanner-controls select {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: #fff;
+}
+
+.engine-note {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.camera-preview-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem;
+  background: #f9fafb;
+  text-align: center;
+}
+
+.scanner-video {
+  width: 100%;
+  max-height: 360px;
+  border-radius: 8px;
+  background: #111827;
+  object-fit: cover;
+}
+
+.camera-preview-box p {
+  margin: 0.75rem 0 0 0;
+  font-size: 0.875rem;
+  color: #6b7280;
 }
 
 .separator {
@@ -241,6 +321,12 @@
   gap: 1rem;
 }
 
+.qr-input-form label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1f2937;
+}
+
 .qr-input {
   padding: 0.75rem;
   border: 1px solid #e5e7eb;
@@ -299,5 +385,19 @@
   font-size: 0.75rem;
   color: #9ca3af;
   margin-top: 0.25rem;
+}
+
+@media (max-width: 640px) {
+  .sign-out-page {
+    padding: 1rem;
+  }
+
+  .sign-out-container {
+    padding: 1rem;
+  }
+
+  .page-header h1 {
+    font-size: 1.5rem;
+  }
 }
 

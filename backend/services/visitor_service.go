@@ -50,6 +50,11 @@ func SavePhoto(file io.Reader, originalFilename string) (string, error) {
 // - insert a new visitor row
 // - return the saved visitor
 func CreateVisitor(ctx context.Context, req models.VisitorSignInRequest) (*models.Visitor, error) {
+	normalizedPhone, err := NormalizePhoneNumber(req.Phone)
+	if err != nil {
+		return nil, fmt.Errorf("create visitor phone validation: %w", err)
+	}
+
 	qrValue, _, err := utils.GenerateQRCodeValue()
 	if err != nil {
 		return nil, fmt.Errorf("create visitor: %w", err)
@@ -66,7 +71,7 @@ func CreateVisitor(ctx context.Context, req models.VisitorSignInRequest) (*model
 		ctx,
 		query,
 		req.FullName,
-		req.Phone,
+		normalizedPhone,
 		req.Email,
 		req.Purpose,
 		req.HostName,
@@ -152,6 +157,58 @@ func SignOutVisitor(ctx context.Context, id int) (*models.Visitor, error) {
 	}
 
 	log.Printf("[SERVICE] Successfully signed out visitor ID: %d, new status: %s\n", v.ID, v.Status)
+	return &v, nil
+}
+
+// SignOutVisitorByQRCode marks a visitor as 'out' by QR code and records sign_out_time.
+// It only allows sign-out when the current status is 'in' (case-insensitive).
+func SignOutVisitorByQRCode(ctx context.Context, qrCode string) (*models.Visitor, error) {
+	log.Printf("[SERVICE] SignOutVisitorByQRCode called with QR: %s\n", qrCode)
+
+	const updateQuery = `
+		UPDATE visitors
+		SET status = 'out', sign_out_time = NOW()
+		WHERE qr_code = $1 AND (status = 'in' OR status = 'IN')
+		RETURNING id, full_name, phone, email, purpose, host_name,
+				  sign_in_time, sign_out_time, photo_url, qr_code, status
+	`
+
+	row := config.DB.QueryRowContext(ctx, updateQuery, qrCode)
+	var v models.Visitor
+	if err := row.Scan(
+		&v.ID,
+		&v.FullName,
+		&v.Phone,
+		&v.Email,
+		&v.Purpose,
+		&v.HostName,
+		&v.SignInTime,
+		&v.SignOutTime,
+		&v.PhotoURL,
+		&v.QRCode,
+		&v.Status,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			// Determine whether the visitor doesn't exist or is already signed out.
+			var exists bool
+			var currentStatus string
+			err2 := config.DB.QueryRowContext(
+				ctx,
+				"SELECT EXISTS(SELECT 1 FROM visitors WHERE qr_code=$1), COALESCE((SELECT status FROM visitors WHERE qr_code=$1), 'N/A') AS status",
+				qrCode,
+			).Scan(&exists, &currentStatus)
+			if err2 != nil {
+				return nil, fmt.Errorf("sign-out qr existence check: %w", err2)
+			}
+			if !exists {
+				return nil, ErrNotFound
+			}
+			return nil, ErrAlreadySignedOut
+		}
+		return nil, fmt.Errorf("sign-out qr scan: %w", err)
+	}
+
+	log.Printf("[SERVICE] Successfully signed out visitor by QR, ID: %d, new status: %s\n", v.ID, v.Status)
 	return &v, nil
 }
 

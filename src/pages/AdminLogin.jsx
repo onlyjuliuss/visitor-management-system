@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AcademicCityLogo from '../components/AcademicCityLogo'
+import { apiUrl } from '../lib/api'
 import './AdminLogin.css'
 
 function AdminLogin() {
@@ -18,7 +20,7 @@ function AdminLogin() {
     }
 
     try {
-      const response = await fetch('http://localhost:8080/api/admin/login', {
+      const response = await fetch(apiUrl('/api/admin/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -43,7 +45,7 @@ function AdminLogin() {
 
   const testConnection = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/admin/login', {
+      const response = await fetch(apiUrl('/api/admin/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -56,7 +58,7 @@ function AdminLogin() {
         alert('✗ Server responded with error: ' + response.status)
       }
     } catch (err) {
-      alert('✗ Cannot connect to server at http://localhost:8080\nError: ' + err.message)
+      alert('✗ Cannot connect to backend API\nError: ' + err.message)
     }
   }
 
@@ -64,13 +66,7 @@ function AdminLogin() {
     <div className="admin-login-page">
       <div className="login-container">
         <div className="login-header">
-          <div className="logo-icon">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#dc2626" />
-              <path d="M2 17L12 22L22 17" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 12L12 17L22 12" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+          <AcademicCityLogo className="admin-login-logo" />
           <h1>Admin Login</h1>
           <p>Enter your credentials to access the admin panel</p>
         </div>

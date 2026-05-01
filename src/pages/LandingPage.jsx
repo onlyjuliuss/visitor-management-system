@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import AcademicCityLogo from '../components/AcademicCityLogo'
 import './LandingPage.css'
 
 function LandingPage() {
@@ -8,13 +9,7 @@ function LandingPage() {
     <div className="landing-page">
       <div className="landing-container">
         <div className="logo-container">
-          <div className="logo-icon">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#dc2626" />
-              <path d="M2 17L12 22L22 17" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 12L12 17L22 12" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+          <AcademicCityLogo className="brand-logo" />
           <h1 className="main-title">
             <span className="brand-name">acity</span>
             <span className="brand-amp">-</span>
@@ -40,19 +35,10 @@ function LandingPage() {
             </div>
           </div>
 
-          <div className="action-card" onClick={() => navigate('/sign-out')}>
-            <div className="card-icon red">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M8.5 11C10.7091 11 12.5 9.20914 12.5 7C12.5 4.79086 10.7091 3 8.5 3C6.29086 3 4.5 4.79086 4.5 7C4.5 9.20914 6.29086 11 8.5 11Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M1 13L7 7L1 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <div className="card-content">
-              <h2>Sign Out</h2>
-              <p>Complete your visit and sign out</p>
-            </div>
-          </div>
+        </div>
+
+        <div className="reception-note">
+          For sign-out, please proceed to reception.
         </div>
 
         <button className="admin-button" onClick={() => navigate('/admin')}>

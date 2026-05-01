@@ -16,6 +16,12 @@ func Register() {
 	http.HandleFunc("/api/visitors/sign-in", handlers.VisitorSignInHandler)
 	http.HandleFunc("/api/visitors/sign-out", handlers.VisitorSignOutHandler)
 	http.HandleFunc("/api/visitors/stats", handlers.GetVisitorStatsHandler)
+	http.HandleFunc("/api/visitors/status/", handlers.GetVisitorsByStatusHandler)
+	http.HandleFunc("/api/visitors/send-reminder", handlers.SendReminderHandler)
+
+	// Notification routes
+	http.HandleFunc("/api/notifications/test-reminder", handlers.SendTestReminderHandler)
+	http.HandleFunc("/api/notifications/visitors-needing-reminders", handlers.GetVisitorsNeedingRemindersHandler)
 
 	// File serving routes
 	http.HandleFunc("/api/photos/", handlers.ServePhotoHandler)

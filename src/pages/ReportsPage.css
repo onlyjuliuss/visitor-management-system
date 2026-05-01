@@ -1,3 +1,14 @@
+.content-header {
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.header-logo {
+  margin-left: auto;
+}
+
 .report-filters-section {
   background: white;
   border-radius: 12px;

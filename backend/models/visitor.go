@@ -29,7 +29,9 @@ type VisitorSignInRequest struct {
 
 // VisitorSignOutRequest is the payload for signing out a visitor.
 type VisitorSignOutRequest struct {
-	ID int `json:"id"`
+	// Provide either ID or QRCode.
+	ID     int    `json:"id"`
+	QRCode string `json:"qr_code"`
 }
 
 // VisitorUpdateRequest is the payload for updating a visitor.

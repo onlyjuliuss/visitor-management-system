@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useVisitors } from '../context/VisitorContext'
 import AdminSidebar from '../components/AdminSidebar'
+import AcademicCityLogo from '../components/AcademicCityLogo'
 import './AdminDashboard.css'
 
 function AdminDashboard() {
@@ -9,8 +10,7 @@ function AdminDashboard() {
     visitors, 
     getCurrentlySignedIn, 
     getNotSignedOut, 
-    getWeeklyTotal,
-    logoutAdmin
+    getWeeklyTotal
   } = useVisitors()
 
   const currentlySignedIn = getCurrentlySignedIn()
@@ -33,6 +33,7 @@ function AdminDashboard() {
             <h1>Dashboard</h1>
             <p>Welcome to the acity-PASS Visitor Management System.</p>
           </div>
+          <AcademicCityLogo className="header-logo" />
         </div>
 
         <div className="stats-grid">
@@ -111,7 +112,7 @@ function AdminDashboard() {
                   <div key={visitor.id} className="visitor-item">
                     <div className="visitor-info">
                       <div className="visitor-name">{visitor.fullName}</div>
-                      <div className="visitor-purpose">Visiting: {visitor.personToVisit}</div>
+                      <div className="visitor-purpose">Visiting: {visitor.hostName}</div>
                     </div>
                     <div className="visitor-meta">
                       <span className={`visitor-status-badge ${visitor.status}`}>

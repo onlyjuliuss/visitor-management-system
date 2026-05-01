@@ -1,12 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { useVisitors } from '../context/VisitorContext'
 import './AdminSidebar.css'
 
 function AdminSidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { logoutAdmin } = useVisitors()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   const isActive = (path) => location.pathname === path
@@ -65,6 +63,18 @@ function AdminSidebar() {
           {!isCollapsed && <span>Reports</span>}
         </div>
         
+        <div 
+          className={`nav-item ${isActive('/admin/sign-out-desk') ? 'active' : ''}`}
+          onClick={() => navigate('/admin/sign-out-desk')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17 16L21 12L17 8" stroke={isActive('/admin/sign-out-desk') ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M21 12H9" stroke={isActive('/admin/sign-out-desk') ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 20H5C4.46957 20 3.96086 19.7893 3.58579 19.4142C3.21071 19.0391 3 18.5304 3 18V6C3 5.46957 3.21071 4.96086 3.58579 4.58579C3.96086 4.21071 4.46957 4 5 4H12" stroke={isActive('/admin/sign-out-desk') ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {!isCollapsed && <span>Sign-out Desk</span>}
+        </div>
+
         <div 
           className={`nav-item ${isActive('/admin/settings') ? 'active' : ''}`}
           onClick={() => navigate('/admin/settings')}

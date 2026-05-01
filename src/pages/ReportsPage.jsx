@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import AdminSidebar from '../components/AdminSidebar'
 import { useVisitors } from '../context/VisitorContext'
+import AcademicCityLogo from '../components/AcademicCityLogo'
 import './ReportsPage.css'
 
 function ReportsPage() {
@@ -66,10 +67,10 @@ function ReportsPage() {
     const headers = ['Date', 'Name', 'Contact', 'Visiting', 'Purpose', 'Time In', 'Time Out', 'Status']
     const rows = filteredVisitors.map(v => [
       new Date(v.signInTime).toLocaleDateString(),
-      v.fullName,
-      v.contactNumber,
-      v.personToVisit,
-      v.purpose,
+      v.fullName || '',
+      v.phone || '',
+      v.hostName || '',
+      v.purpose || '',
       new Date(v.signInTime).toLocaleTimeString(),
       v.signOutTime ? new Date(v.signOutTime).toLocaleTimeString() : '-',
       v.status === 'in' ? 'In' : 'Out'
@@ -99,6 +100,7 @@ function ReportsPage() {
             <h1>Reports</h1>
             <p>Generate and export visitor reports with custom filters.</p>
           </div>
+          <AcademicCityLogo className="header-logo" />
         </div>
 
         <div className="report-filters-section">

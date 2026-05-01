@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import AdminSidebar from '../components/AdminSidebar'
 import { useVisitors } from '../context/VisitorContext'
+import AcademicCityLogo from '../components/AcademicCityLogo'
 import './VisitorsPage.css'
 
 function VisitorsPage() {
@@ -13,9 +14,9 @@ function VisitorsPage() {
 
   const filteredVisitors = visitors.filter(visitor => {
     const matchesSearch = !searchQuery || 
-      visitor.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      visitor.contactNumber.includes(searchQuery) ||
-      visitor.personToVisit.toLowerCase().includes(searchQuery.toLowerCase())
+      (visitor.fullName && visitor.fullName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (visitor.phone && visitor.phone.includes(searchQuery)) ||
+      (visitor.hostName && visitor.hostName.toLowerCase().includes(searchQuery.toLowerCase()))
     
     const matchesFilter = filter === 'all' || 
       (filter === 'in' && visitor.status === 'in') ||
@@ -28,9 +29,9 @@ function VisitorsPage() {
     const headers = ['Date', 'Name', 'Contact', 'Visiting', 'Time In', 'Time Out', 'Status']
     const rows = filteredVisitors.map(v => [
       new Date(v.signInTime).toLocaleDateString(),
-      v.fullName,
-      v.contactNumber,
-      v.personToVisit,
+      v.fullName || '',
+      v.phone || '',
+      v.hostName || '',
       new Date(v.signInTime).toLocaleTimeString(),
       v.signOutTime ? new Date(v.signOutTime).toLocaleTimeString() : '-',
       v.status === 'in' ? 'In' : 'Out'
@@ -56,6 +57,7 @@ function VisitorsPage() {
             <h1>Visitor Records</h1>
             <p>Manage and view all visitor entries.</p>
           </div>
+          <AcademicCityLogo className="header-logo" />
         </div>
 
         <div className="visitors-section">
@@ -124,8 +126,8 @@ function VisitorsPage() {
                     <div key={visitor.id} className="table-row">
                       <div>{new Date(visitor.signInTime).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</div>
                       <div className="visitor-name-cell">{visitor.fullName}</div>
-                      <div>{visitor.contactNumber}</div>
-                      <div>{visitor.personToVisit}</div>
+                      <div>{visitor.phone}</div>
+                      <div>{visitor.hostName}</div>
                       <div>{new Date(visitor.signInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</div>
                       <div>{visitor.signOutTime ? new Date(visitor.signOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '-'}</div>
                       <div>
