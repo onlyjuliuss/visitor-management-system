@@ -9,6 +9,8 @@ import AdminDashboard from './pages/AdminDashboard'
 import VisitorsPage from './pages/VisitorsPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
+import SecurityDashboard from './pages/SecurityDashboard'
+import CommandCentre from './pages/CommandCentre'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -37,6 +39,14 @@ function App() {
           } 
         />
         <Route 
+          path="/admin/command-centre" 
+          element={
+            <ProtectedRoute>
+              <CommandCentre />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="/admin/visitors" 
           element={
             <ProtectedRoute>
@@ -49,6 +59,14 @@ function App() {
           element={
             <ProtectedRoute>
               <ReportsPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/security" 
+          element={
+            <ProtectedRoute>
+              <SecurityDashboard />
             </ProtectedRoute>
           } 
         />

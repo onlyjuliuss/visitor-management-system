@@ -13,6 +13,27 @@ import (
 	"host-win-backend/services"
 )
 
+func requestIP(r *http.Request) string {
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+	return strings.TrimSpace(r.RemoteAddr)
+}
+
+func metadataJSON(metadata map[string]interface{}) []byte {
+	if metadata == nil {
+		return []byte(`{}`)
+	}
+	b, err := json.Marshal(metadata)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return b
+}
+
 // VisitorSignInHandler handles POST /api/visitors/sign-in (multipart/form-data with photo)
 func VisitorSignInHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -72,6 +93,28 @@ func VisitorSignInHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+		EventType:       "visitor.sign_in.success",
+		ActorType:       "visitor",
+		ActorIdentifier: visitor.FullName,
+		VisitorID:       &visitor.ID,
+		Severity:        "info",
+		Message:         "visitor sign-in completed successfully",
+		Metadata: metadataJSON(map[string]interface{}{
+			"phone":     visitor.Phone,
+			"host_name": visitor.HostName,
+			"purpose":   visitor.Purpose,
+		}),
+		IPAddress: requestIP(r),
+		UserAgent: r.UserAgent(),
+	}); logErr != nil {
+		log.Println("[ACTIVITY] Failed to persist visitor sign-in log:", logErr)
+	}
+
+	if _, riskErr := services.RecalculateVisitorRisk(r.Context(), visitor.ID); riskErr != nil {
+		log.Println("[RISK] Failed to recalculate risk after sign-in:", riskErr)
+	}
+
 	// Send welcome SMS (non-blocking for UX).
 	// If Twilio is not configured or sending fails, we log it but do not fail sign-in.
 	go func(phone string) {
@@ -110,8 +153,36 @@ func SendReminderHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err := services.SendSignOutReminder(req.Phone); err != nil {
 		log.Println("[SMS] reminder send failed:", err)
+		if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+			EventType: "reminder.send.failed",
+			ActorType: "admin",
+			Severity:  "warning",
+			Message:   "manual reminder send failed",
+			Metadata: metadataJSON(map[string]interface{}{
+				"phone": req.Phone,
+				"error": err.Error(),
+			}),
+			IPAddress: requestIP(r),
+			UserAgent: r.UserAgent(),
+		}); logErr != nil {
+			log.Println("[ACTIVITY] Failed to persist reminder failure log:", logErr)
+		}
 		http.Error(w, "could not send reminder", http.StatusInternalServerError)
 		return
+	}
+
+	if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+		EventType: "reminder.send.success",
+		ActorType: "admin",
+		Severity:  "info",
+		Message:   "manual reminder sent successfully",
+		Metadata: metadataJSON(map[string]interface{}{
+			"phone": req.Phone,
+		}),
+		IPAddress: requestIP(r),
+		UserAgent: r.UserAgent(),
+	}); logErr != nil {
+		log.Println("[ACTIVITY] Failed to persist reminder success log:", logErr)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -131,6 +202,19 @@ func VisitorSignOutHandler(w http.ResponseWriter, r *http.Request) {
 	var req models.VisitorSignOutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Println("[SIGN-OUT] Decode error:", err)
+		if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+			EventType: "visitor.sign_out.failed",
+			ActorType: "admin",
+			Severity:  "warning",
+			Message:   "visitor sign-out request rejected: invalid payload",
+			Metadata: metadataJSON(map[string]interface{}{
+				"reason": "invalid_payload",
+			}),
+			IPAddress: requestIP(r),
+			UserAgent: r.UserAgent(),
+		}); logErr != nil {
+			log.Println("[ACTIVITY] Failed to persist sign-out payload failure log:", logErr)
+		}
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -141,15 +225,27 @@ func VisitorSignOutHandler(w http.ResponseWriter, r *http.Request) {
 		visitor *models.Visitor
 		err     error
 	)
+	hasQRCode := strings.TrimSpace(req.QRCode) != ""
 
 	// Allow sign-out by QR code (preferred) or by ID.
-	if strings.TrimSpace(req.QRCode) != "" {
+	if hasQRCode {
 		log.Printf("[SIGN-OUT] Calling SignOutVisitorByQRCode with QR: %s\n", req.QRCode)
 		visitor, err = services.SignOutVisitorByQRCode(r.Context(), strings.TrimSpace(req.QRCode))
 	} else if req.ID > 0 {
 		log.Printf("[SIGN-OUT] Calling SignOutVisitor with ID: %d\n", req.ID)
 		visitor, err = services.SignOutVisitor(r.Context(), req.ID)
 	} else {
+		if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+			EventType: "visitor.sign_out.failed",
+			ActorType: "admin",
+			Severity:  "warning",
+			Message:   "visitor sign-out request rejected: missing id and qr_code",
+			Metadata:  []byte(`{"reason":"missing_identifier"}`),
+			IPAddress: requestIP(r),
+			UserAgent: r.UserAgent(),
+		}); logErr != nil {
+			log.Println("[ACTIVITY] Failed to persist sign-out failure log:", logErr)
+		}
 		http.Error(w, "provide either qr_code or id", http.StatusBadRequest)
 		return
 	}
@@ -158,20 +254,187 @@ func VisitorSignOutHandler(w http.ResponseWriter, r *http.Request) {
 		switch err {
 		case services.ErrNotFound:
 			log.Printf("[SIGN-OUT] Visitor not found - ID: %d, QR: %s\n", req.ID, req.QRCode)
+			if hasQRCode {
+				if visitorID, lookupErr := services.FindVisitorIDByQRCodeInput(r.Context(), req.QRCode); lookupErr == nil && visitorID > 0 {
+					if _, riskErr := services.RecalculateVisitorRisk(r.Context(), visitorID); riskErr != nil {
+						log.Println("[RISK] Failed to recalculate visitor risk:", riskErr)
+					}
+				}
+				if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+					EventType: "qr_scan_failed",
+					ActorType: "admin",
+					Severity:  "warning",
+					Message:   "qr scan failed: token not found",
+					Metadata: metadataJSON(map[string]interface{}{
+						"qr_code": req.QRCode,
+					}),
+					IPAddress: requestIP(r),
+					UserAgent: r.UserAgent(),
+				}); logErr != nil {
+					log.Println("[ACTIVITY] Failed to persist qr_scan_failed log:", logErr)
+				}
+			}
+			if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+				EventType: "visitor.sign_out.failed",
+				ActorType: "admin",
+				Severity:  "warning",
+				Message:   "visitor sign-out failed: visitor not found",
+				Metadata: metadataJSON(map[string]interface{}{
+					"id":      req.ID,
+					"qr_code": req.QRCode,
+					"reason":  "not_found",
+				}),
+				IPAddress: requestIP(r),
+				UserAgent: r.UserAgent(),
+			}); logErr != nil {
+				log.Println("[ACTIVITY] Failed to persist sign-out failure log:", logErr)
+			}
 			http.Error(w, "visitor not found", http.StatusNotFound)
 			return
 		case services.ErrAlreadySignedOut:
 			log.Printf("[SIGN-OUT] Visitor already signed out - ID: %d, QR: %s\n", req.ID, req.QRCode)
+			if hasQRCode {
+				if visitorID, lookupErr := services.FindVisitorIDByQRCodeInput(r.Context(), req.QRCode); lookupErr == nil && visitorID > 0 {
+					if _, riskErr := services.RecalculateVisitorRisk(r.Context(), visitorID); riskErr != nil {
+						log.Println("[RISK] Failed to recalculate visitor risk:", riskErr)
+					}
+				}
+				if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+					EventType: "qr_token_reused",
+					ActorType: "admin",
+					Severity:  "warning",
+					Message:   "qr token reuse detected (already signed out)",
+					Metadata: metadataJSON(map[string]interface{}{
+						"qr_code": req.QRCode,
+					}),
+					IPAddress: requestIP(r),
+					UserAgent: r.UserAgent(),
+				}); logErr != nil {
+					log.Println("[ACTIVITY] Failed to persist qr_token_reused log:", logErr)
+				}
+			}
+			if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+				EventType: "visitor.sign_out.failed",
+				ActorType: "admin",
+				Severity:  "warning",
+				Message:   "visitor sign-out failed: already signed out",
+				Metadata: metadataJSON(map[string]interface{}{
+					"id":      req.ID,
+					"qr_code": req.QRCode,
+					"reason":  "already_signed_out",
+				}),
+				IPAddress: requestIP(r),
+				UserAgent: r.UserAgent(),
+			}); logErr != nil {
+				log.Println("[ACTIVITY] Failed to persist sign-out failure log:", logErr)
+			}
 			http.Error(w, "visitor already signed out", http.StatusBadRequest)
+			return
+		case services.ErrQRTokenExpired:
+			log.Printf("[SIGN-OUT] QR token expired - QR: %s\n", req.QRCode)
+			if visitorID, lookupErr := services.FindVisitorIDByQRCodeInput(r.Context(), req.QRCode); lookupErr == nil && visitorID > 0 {
+				if _, riskErr := services.RecalculateVisitorRisk(r.Context(), visitorID); riskErr != nil {
+					log.Println("[RISK] Failed to recalculate visitor risk:", riskErr)
+				}
+			}
+			if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+				EventType: "qr_token_expired",
+				ActorType: "admin",
+				Severity:  "warning",
+				Message:   "qr token expired",
+				Metadata: metadataJSON(map[string]interface{}{
+					"qr_code": req.QRCode,
+				}),
+				IPAddress: requestIP(r),
+				UserAgent: r.UserAgent(),
+			}); logErr != nil {
+				log.Println("[ACTIVITY] Failed to persist qr_token_expired log:", logErr)
+			}
+			http.Error(w, "qr token expired", http.StatusBadRequest)
+			return
+		case services.ErrQRTokenRevoked:
+			log.Printf("[SIGN-OUT] QR token revoked - QR: %s\n", req.QRCode)
+			if visitorID, lookupErr := services.FindVisitorIDByQRCodeInput(r.Context(), req.QRCode); lookupErr == nil && visitorID > 0 {
+				if _, riskErr := services.RecalculateVisitorRisk(r.Context(), visitorID); riskErr != nil {
+					log.Println("[RISK] Failed to recalculate visitor risk:", riskErr)
+				}
+			}
+			if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+				EventType: "qr_token_revoked",
+				ActorType: "admin",
+				Severity:  "warning",
+				Message:   "qr token revoked",
+				Metadata: metadataJSON(map[string]interface{}{
+					"qr_code": req.QRCode,
+				}),
+				IPAddress: requestIP(r),
+				UserAgent: r.UserAgent(),
+			}); logErr != nil {
+				log.Println("[ACTIVITY] Failed to persist qr_token_revoked log:", logErr)
+			}
+			http.Error(w, "qr token revoked", http.StatusBadRequest)
 			return
 		default:
 			log.Printf("[SIGN-OUT] Service error - ID: %d, QR: %s, Error: %v\n", req.ID, req.QRCode, err)
+			if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+				EventType: "visitor.sign_out.failed",
+				ActorType: "admin",
+				Severity:  "error",
+				Message:   "visitor sign-out failed due to server error",
+				Metadata: metadataJSON(map[string]interface{}{
+					"id":      req.ID,
+					"qr_code": req.QRCode,
+					"reason":  "service_error",
+				}),
+				IPAddress: requestIP(r),
+				UserAgent: r.UserAgent(),
+			}); logErr != nil {
+				log.Println("[ACTIVITY] Failed to persist sign-out failure log:", logErr)
+			}
 			http.Error(w, "could not sign out visitor", http.StatusInternalServerError)
 			return
 		}
 	}
 
 	log.Printf("[SIGN-OUT] Success - Visitor %d signed out\n", visitor.ID)
+	eventType := "visitor.sign_out.by_id"
+	if hasQRCode {
+		eventType = "visitor.sign_out.by_qr"
+		if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+			EventType:       "qr_scan_success",
+			ActorType:       "admin",
+			ActorIdentifier: "admin",
+			VisitorID:       &visitor.ID,
+			Severity:        "info",
+			Message:         "qr scan validated and sign-out completed",
+			Metadata: metadataJSON(map[string]interface{}{
+				"qr_code": req.QRCode,
+			}),
+			IPAddress: requestIP(r),
+			UserAgent: r.UserAgent(),
+		}); logErr != nil {
+			log.Println("[ACTIVITY] Failed to persist qr_scan_success log:", logErr)
+		}
+	}
+	if _, riskErr := services.RecalculateVisitorRisk(r.Context(), visitor.ID); riskErr != nil {
+		log.Println("[RISK] Failed to recalculate risk after sign-out:", riskErr)
+	}
+	if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+		EventType:       eventType,
+		ActorType:       "admin",
+		ActorIdentifier: "admin",
+		VisitorID:       &visitor.ID,
+		Severity:        "info",
+		Message:         "visitor signed out successfully",
+		Metadata: metadataJSON(map[string]interface{}{
+			"id":      visitor.ID,
+			"qr_code": visitor.QRCode,
+		}),
+		IPAddress: requestIP(r),
+		UserAgent: r.UserAgent(),
+	}); logErr != nil {
+		log.Println("[ACTIVITY] Failed to persist sign-out success log:", logErr)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(visitor); err != nil {
 		log.Println("[SIGN-OUT] Encode response error:", err)
@@ -187,7 +450,7 @@ func GetAllVisitorsHandler(w http.ResponseWriter, r *http.Request) {
 
 	visitors, err := services.GetAllVisitors(r.Context())
 	if err != nil {
-		log.Println("get all visitors error:", err)
+		log.Println("[VISITORS] GetAllVisitors failed:", err)
 		http.Error(w, "could not fetch visitors", http.StatusInternalServerError)
 		return
 	}
@@ -253,6 +516,22 @@ func GetVisitorByIDHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("delete visitor error:", err)
 			http.Error(w, "could not delete visitor", http.StatusInternalServerError)
 			return
+		}
+
+		if logErr := services.CreateActivityLog(r.Context(), models.ActivityLog{
+			EventType:       "visitor.delete.success",
+			ActorType:       "admin",
+			ActorIdentifier: "admin",
+			VisitorID:       &id,
+			Severity:        "warning",
+			Message:         "visitor record deleted",
+			Metadata: metadataJSON(map[string]interface{}{
+				"visitor_id": id,
+			}),
+			IPAddress: requestIP(r),
+			UserAgent: r.UserAgent(),
+		}); logErr != nil {
+			log.Println("[ACTIVITY] Failed to persist visitor deletion log:", logErr)
 		}
 
 		w.WriteHeader(http.StatusNoContent)
@@ -368,8 +647,8 @@ func GetVisitorStatsHandler(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := services.GetVisitorStats(r.Context())
 	if err != nil {
-		log.Println("get visitor stats error:", err)
-		http.Error(w, "could not fetch stats", http.StatusInternalServerError)
+		log.Printf("[VISITORS] GetVisitorStats handler: %v", err)
+		WriteJSONError(w, http.StatusInternalServerError, "could not fetch stats")
 		return
 	}
 

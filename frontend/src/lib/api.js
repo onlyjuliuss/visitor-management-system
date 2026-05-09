@@ -13,3 +13,22 @@ export const apiUrl = (path) => {
   return `${API_BASE_URL}${path}`
 }
 
+export const getAuthHeaders = (headers = {}) => {
+  const token = localStorage.getItem('adminToken')
+  if (!token) {
+    return headers
+  }
+  return {
+    ...headers,
+    Authorization: `Bearer ${token}`
+  }
+}
+
+export const authFetch = (path, options = {}) => {
+  const { headers = {}, ...rest } = options
+  return fetch(apiUrl(path), {
+    ...rest,
+    headers: getAuthHeaders(headers)
+  })
+}
+

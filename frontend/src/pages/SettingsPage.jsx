@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import AdminSidebar from '../components/AdminSidebar'
 import AcademicCityLogo from '../components/AcademicCityLogo'
-import { apiUrl } from '../lib/api'
+import { authFetch } from '../lib/api'
 import './SettingsPage.css'
 
 function SettingsPage() {
@@ -65,7 +65,7 @@ function SettingsPage() {
 
     setLoading(true)
     try {
-      const response = await fetch(apiUrl('/api/notifications/test-reminder'), {
+      const response = await authFetch('/api/notifications/test-reminder', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -86,7 +86,7 @@ function SettingsPage() {
 
   const checkVisitorsNeedingReminders = async () => {
     try {
-      const response = await fetch(apiUrl('/api/notifications/visitors-needing-reminders'))
+      const response = await authFetch('/api/notifications/visitors-needing-reminders')
       if (response.ok) {
         const data = await response.json()
         alert(`${data.count} visitors would receive reminders today`)

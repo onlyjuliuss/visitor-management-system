@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { apiUrl } from '../lib/api'
+import { apiUrl, authFetch } from '../lib/api'
 
 const VisitorContext = createContext()
 
@@ -13,8 +13,15 @@ export function VisitorProvider({ children }) {
   }, [])
 
   const fetchAllVisitors = async () => {
+    const token = localStorage.getItem('adminToken')
+    if (!token) {
+      setVisitors([])
+      setLoading(false)
+      return
+    }
+
     try {
-      const response = await fetch(apiUrl('/api/visitors'))
+      const response = await authFetch('/api/visitors')
       if (response.ok) {
         const data = await response.json()
         // Transform snake_case from backend to camelCase for frontend
@@ -42,8 +49,13 @@ export function VisitorProvider({ children }) {
   }
 
   const getVisitorById = async (id) => {
+    const token = localStorage.getItem('adminToken')
+    if (!token) {
+      return null
+    }
+
     try {
-      const response = await fetch(apiUrl(`/api/visitors/${id}`))
+      const response = await authFetch(`/api/visitors/${id}`)
       if (response.ok) {
         const v = await response.json()
         // Transform snake_case from backend to camelCase for frontend
@@ -84,7 +96,7 @@ export function VisitorProvider({ children }) {
         if (payload.qrCode) bodyObj.qr_code = payload.qrCode
       }
 
-      const response = await fetch(apiUrl('/api/visitors/sign-out'), {
+      const response = await authFetch('/api/visitors/sign-out', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

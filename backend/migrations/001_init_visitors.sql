@@ -20,5 +20,6 @@ CREATE INDEX IF NOT EXISTS idx_visitors_status_lower
   ON visitors (LOWER(status));
 
 -- UTC calendar date: timestamptz::date is not IMMUTABLE (depends on session TZ), so Postgres rejects it in indexes.
-CREATE INDEX IF NOT EXISTS idx_visitors_sign_in_date_utc
-  ON visitors (((sign_in_time AT TIME ZONE 'UTC')::date));
+-- Simple index (safe)
+CREATE INDEX IF NOT EXISTS idx_visitors_sign_in_time
+  ON visitors (sign_in_time);

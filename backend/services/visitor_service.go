@@ -9,6 +9,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"host-win-backend/config"
@@ -45,6 +47,19 @@ func SavePhoto(file io.Reader, originalFilename string) (string, error) {
 	return filepath.Join("uploads", filename), nil
 }
 
+func getQRExpiryDuration() time.Duration {
+	const defaultHours = 12
+	raw := strings.TrimSpace(os.Getenv("QR_TOKEN_EXPIRY_HOURS"))
+	if raw == "" {
+		return defaultHours * time.Hour
+	}
+	hours, err := strconv.Atoi(raw)
+	if err != nil || hours <= 0 {
+		return defaultHours * time.Hour
+	}
+	return time.Duration(hours) * time.Hour
+}
+
 // CreateVisitor handles the core sign-in logic:
 // - generate a QR code string
 // - insert a new visitor row
@@ -55,17 +70,20 @@ func CreateVisitor(ctx context.Context, req models.VisitorSignInRequest) (*model
 		return nil, fmt.Errorf("create visitor phone validation: %w", err)
 	}
 
-	qrValue, _, err := utils.GenerateQRCodeValue()
+	qrValue, qrHash, _, err := utils.GenerateSecureQRCodeValue()
 	if err != nil {
 		return nil, fmt.Errorf("create visitor: %w", err)
 	}
+	qrExpiresAt := time.Now().Add(getQRExpiryDuration())
 
-	const query = `
-		INSERT INTO visitors (full_name, phone, email, purpose, host_name, photo_url, qr_code, sign_in_time, sign_out_time, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NULL, 'in')
-		RETURNING id, full_name, phone, email, purpose, host_name,
-		          sign_in_time, sign_out_time, photo_url, qr_code, status
-	`
+	query := `
+		INSERT INTO visitors (
+			full_name, phone, email, purpose, host_name, photo_url,
+			qr_code, qr_token_hash, qr_expires_at, qr_revoked, qr_scan_count,
+			sign_in_time, sign_out_time, status
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, 0, NOW(), NULL, 'in')
+		RETURNING ` + visitorSelectColumns
 
 	row := config.DB.QueryRowContext(
 		ctx,
@@ -77,22 +95,12 @@ func CreateVisitor(ctx context.Context, req models.VisitorSignInRequest) (*model
 		req.HostName,
 		req.PhotoURL,
 		qrValue,
+		qrHash,
+		qrExpiresAt,
 	)
 
 	var v models.Visitor
-	if err := row.Scan(
-		&v.ID,
-		&v.FullName,
-		&v.Phone,
-		&v.Email,
-		&v.Purpose,
-		&v.HostName,
-		&v.SignInTime,
-		&v.SignOutTime,
-		&v.PhotoURL,
-		&v.QRCode,
-		&v.Status,
-	); err != nil {
+	if err := scanFullVisitor(row, &v); err != nil {
 		return nil, fmt.Errorf("create visitor scan: %w", err)
 	}
 
@@ -103,6 +111,8 @@ func CreateVisitor(ctx context.Context, req models.VisitorSignInRequest) (*model
 var (
 	ErrNotFound         = errors.New("visitor not found")
 	ErrAlreadySignedOut = errors.New("visitor already signed out")
+	ErrQRTokenExpired   = errors.New("qr token expired")
+	ErrQRTokenRevoked   = errors.New("qr token revoked")
 )
 
 // SignOutVisitor marks a visitor as 'out' and records sign_out_time.
@@ -110,30 +120,16 @@ var (
 func SignOutVisitor(ctx context.Context, id int) (*models.Visitor, error) {
 	log.Printf("[SERVICE] SignOutVisitor called with ID: %d\n", id)
 
-	const updateQuery = `
+	updateQuery := `
 		UPDATE visitors
 		SET status = 'out', sign_out_time = NOW()
 		WHERE id = $1 AND (status = 'in' OR status = 'IN')
-		RETURNING id, full_name, phone, email, purpose, host_name,
-				  sign_in_time, sign_out_time, photo_url, qr_code, status
-	`
+		RETURNING ` + visitorSelectColumns
 
 	log.Printf("[SERVICE] Executing UPDATE query for visitor ID: %d\n", id)
 	row := config.DB.QueryRowContext(ctx, updateQuery, id)
 	var v models.Visitor
-	if err := row.Scan(
-		&v.ID,
-		&v.FullName,
-		&v.Phone,
-		&v.Email,
-		&v.Purpose,
-		&v.HostName,
-		&v.SignInTime,
-		&v.SignOutTime,
-		&v.PhotoURL,
-		&v.QRCode,
-		&v.Status,
-	); err != nil {
+	if err := scanFullVisitor(row, &v); err != nil {
 		log.Printf("[SERVICE] Scan error for ID %d: %v\n", id, err)
 		if err == sql.ErrNoRows {
 			// Determine whether the visitor doesn't exist or is already signed out.
@@ -165,31 +161,72 @@ func SignOutVisitor(ctx context.Context, id int) (*models.Visitor, error) {
 func SignOutVisitorByQRCode(ctx context.Context, qrCode string) (*models.Visitor, error) {
 	log.Printf("[SERVICE] SignOutVisitorByQRCode called with QR: %s\n", qrCode)
 
-	const updateQuery = `
+	qrCode = strings.TrimSpace(qrCode)
+	if qrCode == "" {
+		return nil, ErrNotFound
+	}
+
+	// New secure token flow: ACITYPASS:<token>
+	if strings.HasPrefix(qrCode, utils.SecureQRPrefix) {
+		qrHash := utils.HashSecureQRToken(qrCode)
+		lookupQuery := `
+			SELECT ` + visitorSelectColumns + `
+			FROM visitors
+			WHERE qr_token_hash = $1
+			LIMIT 1
+		`
+
+		var existing models.Visitor
+		row := config.DB.QueryRowContext(ctx, lookupQuery, qrHash)
+		if err := scanFullVisitor(row, &existing); err != nil {
+			if err == sql.ErrNoRows {
+				return nil, ErrNotFound
+			}
+			return nil, fmt.Errorf("sign-out secure qr lookup: %w", err)
+		}
+
+		if existing.Status != "in" && existing.Status != "IN" {
+			return nil, ErrAlreadySignedOut
+		}
+		if existing.QRRevoked {
+			return nil, ErrQRTokenRevoked
+		}
+		if existing.QRExpiresAt != nil && existing.QRExpiresAt.Before(time.Now()) {
+			return nil, ErrQRTokenExpired
+		}
+
+		updateSecureQRQuery := `
+			UPDATE visitors
+			SET status = 'out',
+			    sign_out_time = NOW(),
+			    qr_revoked = TRUE,
+			    qr_last_scanned_at = NOW(),
+			    qr_scan_count = qr_scan_count + 1
+			WHERE id = $1 AND (status = 'in' OR status = 'IN')
+			RETURNING ` + visitorSelectColumns
+
+		var v models.Visitor
+		updateRow := config.DB.QueryRowContext(ctx, updateSecureQRQuery, existing.ID)
+		if err := scanFullVisitor(updateRow, &v); err != nil {
+			if err == sql.ErrNoRows {
+				return nil, ErrAlreadySignedOut
+			}
+			return nil, fmt.Errorf("sign-out secure qr update: %w", err)
+		}
+		log.Printf("[SERVICE] Successfully signed out visitor by secure QR, ID: %d, new status: %s\n", v.ID, v.Status)
+		return &v, nil
+	}
+
+	// Legacy fallback: old plain qr_code values, maintain backward compatibility.
+	updateLegacyQuery := `
 		UPDATE visitors
 		SET status = 'out', sign_out_time = NOW()
 		WHERE qr_code = $1 AND (status = 'in' OR status = 'IN')
-		RETURNING id, full_name, phone, email, purpose, host_name,
-				  sign_in_time, sign_out_time, photo_url, qr_code, status
-	`
-
-	row := config.DB.QueryRowContext(ctx, updateQuery, qrCode)
+		RETURNING ` + visitorSelectColumns
+	row := config.DB.QueryRowContext(ctx, updateLegacyQuery, qrCode)
 	var v models.Visitor
-	if err := row.Scan(
-		&v.ID,
-		&v.FullName,
-		&v.Phone,
-		&v.Email,
-		&v.Purpose,
-		&v.HostName,
-		&v.SignInTime,
-		&v.SignOutTime,
-		&v.PhotoURL,
-		&v.QRCode,
-		&v.Status,
-	); err != nil {
+	if err := scanFullVisitor(row, &v); err != nil {
 		if err == sql.ErrNoRows {
-			// Determine whether the visitor doesn't exist or is already signed out.
 			var exists bool
 			var currentStatus string
 			err2 := config.DB.QueryRowContext(
@@ -208,21 +245,21 @@ func SignOutVisitorByQRCode(ctx context.Context, qrCode string) (*models.Visitor
 		return nil, fmt.Errorf("sign-out qr scan: %w", err)
 	}
 
-	log.Printf("[SERVICE] Successfully signed out visitor by QR, ID: %d, new status: %s\n", v.ID, v.Status)
+	log.Printf("[SERVICE] Successfully signed out visitor by legacy QR, ID: %d, new status: %s\n", v.ID, v.Status)
 	return &v, nil
 }
 
 // GetAllVisitors returns all visitors from the database.
 func GetAllVisitors(ctx context.Context) ([]models.Visitor, error) {
-	const query = `
-		SELECT id, full_name, phone, email, purpose, host_name,
-		       sign_in_time, sign_out_time, photo_url, qr_code, status
+	query := `
+		SELECT ` + visitorSelectColumns + `
 		FROM visitors
 		ORDER BY sign_in_time DESC
 	`
 
 	rows, err := config.DB.QueryContext(ctx, query)
 	if err != nil {
+		log.Println("[VISITORS] GetAllVisitors query failed:", err)
 		return nil, fmt.Errorf("get all visitors query: %w", err)
 	}
 	defer rows.Close()
@@ -230,10 +267,8 @@ func GetAllVisitors(ctx context.Context) ([]models.Visitor, error) {
 	var visitors []models.Visitor
 	for rows.Next() {
 		var v models.Visitor
-		if err := rows.Scan(
-			&v.ID, &v.FullName, &v.Phone, &v.Email, &v.Purpose, &v.HostName,
-			&v.SignInTime, &v.SignOutTime, &v.PhotoURL, &v.QRCode, &v.Status,
-		); err != nil {
+		if err := scanFullVisitor(rows, &v); err != nil {
+			log.Println("[VISITORS] GetAllVisitors scan failed:", err)
 			return nil, fmt.Errorf("get all visitors scan: %w", err)
 		}
 		visitors = append(visitors, v)
@@ -244,19 +279,15 @@ func GetAllVisitors(ctx context.Context) ([]models.Visitor, error) {
 
 // GetVisitorByID returns a single visitor by ID.
 func GetVisitorByID(ctx context.Context, id int) (*models.Visitor, error) {
-	const query = `
-		SELECT id, full_name, phone, email, purpose, host_name,
-		       sign_in_time, sign_out_time, photo_url, qr_code, status
+	query := `
+		SELECT ` + visitorSelectColumns + `
 		FROM visitors
 		WHERE id = $1
 	`
 
 	row := config.DB.QueryRowContext(ctx, query, id)
 	var v models.Visitor
-	if err := row.Scan(
-		&v.ID, &v.FullName, &v.Phone, &v.Email, &v.Purpose, &v.HostName,
-		&v.SignInTime, &v.SignOutTime, &v.PhotoURL, &v.QRCode, &v.Status,
-	); err != nil {
+	if err := scanFullVisitor(row, &v); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -268,9 +299,8 @@ func GetVisitorByID(ctx context.Context, id int) (*models.Visitor, error) {
 
 // GetVisitorsByStatus returns all visitors with a specific status ('in' or 'out').
 func GetVisitorsByStatus(ctx context.Context, status string) ([]models.Visitor, error) {
-	const query = `
-		SELECT id, full_name, phone, email, purpose, host_name,
-		       sign_in_time, sign_out_time, photo_url, qr_code, status
+	query := `
+		SELECT ` + visitorSelectColumns + `
 		FROM visitors
 		WHERE LOWER(status) = LOWER($1)
 		ORDER BY sign_in_time DESC
@@ -285,10 +315,7 @@ func GetVisitorsByStatus(ctx context.Context, status string) ([]models.Visitor, 
 	var visitors []models.Visitor
 	for rows.Next() {
 		var v models.Visitor
-		if err := rows.Scan(
-			&v.ID, &v.FullName, &v.Phone, &v.Email, &v.Purpose, &v.HostName,
-			&v.SignInTime, &v.SignOutTime, &v.PhotoURL, &v.QRCode, &v.Status,
-		); err != nil {
+		if err := scanFullVisitor(rows, &v); err != nil {
 			return nil, fmt.Errorf("get visitors by status scan: %w", err)
 		}
 		visitors = append(visitors, v)
@@ -299,7 +326,7 @@ func GetVisitorsByStatus(ctx context.Context, status string) ([]models.Visitor, 
 
 // UpdateVisitor updates a visitor's details.
 func UpdateVisitor(ctx context.Context, id int, req models.VisitorUpdateRequest) (*models.Visitor, error) {
-	const query = `
+	query := `
 		UPDATE visitors
 		SET full_name = COALESCE(NULLIF($1, ''), full_name),
 		    phone = COALESCE(NULLIF($2, ''), phone),
@@ -308,16 +335,11 @@ func UpdateVisitor(ctx context.Context, id int, req models.VisitorUpdateRequest)
 		    host_name = COALESCE(NULLIF($5, ''), host_name),
 		    photo_url = COALESCE(NULLIF($6, ''), photo_url)
 		WHERE id = $7
-		RETURNING id, full_name, phone, email, purpose, host_name,
-		          sign_in_time, sign_out_time, photo_url, qr_code, status
-	`
+		RETURNING ` + visitorSelectColumns
 
 	row := config.DB.QueryRowContext(ctx, query, req.FullName, req.Phone, req.Email, req.Purpose, req.HostName, req.PhotoURL, id)
 	var v models.Visitor
-	if err := row.Scan(
-		&v.ID, &v.FullName, &v.Phone, &v.Email, &v.Purpose, &v.HostName,
-		&v.SignInTime, &v.SignOutTime, &v.PhotoURL, &v.QRCode, &v.Status,
-	); err != nil {
+	if err := scanFullVisitor(row, &v); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -360,6 +382,7 @@ func GetVisitorStats(ctx context.Context) (*models.VisitorStats, error) {
 	row := config.DB.QueryRowContext(ctx, query)
 	var stats models.VisitorStats
 	if err := row.Scan(&stats.TotalVisitors, &stats.CurrentlySignedIn, &stats.TotalSignedOut); err != nil {
+		log.Printf("[VISITORS] GetVisitorStats failed: %v", err)
 		return nil, fmt.Errorf("get visitor stats: %w", err)
 	}
 

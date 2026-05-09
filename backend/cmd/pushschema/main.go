@@ -1,14 +1,18 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
+	"host-win-backend/config"
+	"host-win-backend/utils"
+
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -18,45 +22,83 @@ func main() {
 	if url == "" {
 		log.Fatal("DATABASE_URL is not set (expected in backend/.env)")
 	}
-	if !strings.Contains(url, "sslmode=") {
-		if strings.Contains(url, "?") {
-			url += "&sslmode=require"
-		} else {
-			url += "?sslmode=require"
-		}
-	}
+	finalURL := config.FinalizeDatabaseURL(url)
+	log.Printf("pushschema: target %s", config.SanitizedDatabaseTarget(finalURL))
 
-	sqlBytes, err := os.ReadFile("migrations/001_init_visitors.sql")
+	migrationFiles, err := filepath.Glob("migrations/*.sql")
 	if err != nil {
-		log.Fatalf("read migration: %v", err)
+		log.Fatalf("list migrations: %v", err)
+	}
+	if len(migrationFiles) == 0 {
+		log.Fatal("no migration files found in migrations/")
+	}
+	sort.Strings(migrationFiles)
+	log.Printf("pushschema: applying %d migration file(s) in sorted order:", len(migrationFiles))
+	for _, p := range migrationFiles {
+		log.Printf("pushschema:   - %s", p)
 	}
 
-	db, err := sql.Open("postgres", url)
+	db, err := config.OpenPostgres(context.Background(), finalURL)
 	if err != nil {
-		log.Fatalf("open db: %v", err)
-	}
-	defer db.Close()
-
-	if err := db.Ping(); err != nil {
-		log.Printf("ping db: %v", err)
+		log.Printf("open/ping db: %v", err)
 		if strings.Contains(err.Error(), "no such host") || strings.Contains(err.Error(), "lookup ") {
 			log.Print("hint: Supabase \"Direct connection\" hosts are often IPv6-only. Use the \"Session pooler\" URI from Project Settings → Database (host like *.pooler.supabase.com:5432, user postgres.<project-ref>) so traffic goes over IPv4, then retry.")
 		}
 		os.Exit(1)
 	}
+	defer db.Close()
 
-	for _, raw := range strings.Split(string(sqlBytes), ";") {
-		stmt := stripSQLComments(raw)
-		stmt = strings.TrimSpace(stmt)
-		if stmt == "" {
-			continue
+	for _, migrationPath := range migrationFiles {
+		log.Printf("pushschema: applying %s", migrationPath)
+		sqlBytes, err := os.ReadFile(migrationPath)
+		if err != nil {
+			log.Fatalf("read migration %s: %v", migrationPath, err)
 		}
-		if _, err := db.Exec(stmt); err != nil {
-			log.Fatalf("exec failed: %v\n\n---- SQL ----\n%s\n------------", err, stmt)
+
+		for _, raw := range strings.Split(string(sqlBytes), ";") {
+			stmt := stripSQLComments(raw)
+			stmt = strings.TrimSpace(stmt)
+			if stmt == "" {
+				continue
+			}
+			if _, err := db.Exec(stmt); err != nil {
+				log.Fatalf("exec failed (%s): %v\n\n---- SQL ----\n%s\n------------", migrationPath, err, stmt)
+			}
 		}
+		fmt.Printf("OK: applied %s\n", migrationPath)
 	}
 
-	fmt.Println("OK: applied migrations/001_init_visitors.sql to DATABASE_URL")
+	// Backfill qr_token_hash for legacy rows where only qr_code exists.
+	rows, err := db.Query(`
+		SELECT id, qr_code
+		FROM visitors
+		WHERE qr_token_hash IS NULL
+		  AND COALESCE(qr_code, '') <> ''
+	`)
+	if err != nil {
+		log.Fatalf("query legacy qr rows for backfill: %v", err)
+	}
+	defer rows.Close()
+
+	backfilled := 0
+	for rows.Next() {
+		var (
+			id     int
+			qrCode string
+		)
+		if err := rows.Scan(&id, &qrCode); err != nil {
+			log.Fatalf("scan legacy qr row: %v", err)
+		}
+		hash := utils.HashSecureQRToken(qrCode)
+		if _, err := db.Exec(`UPDATE visitors SET qr_token_hash = $1 WHERE id = $2`, hash, id); err != nil {
+			log.Fatalf("backfill qr_token_hash for visitor %d: %v", id, err)
+		}
+		backfilled++
+	}
+	if err := rows.Err(); err != nil {
+		log.Fatalf("iterate legacy qr rows: %v", err)
+	}
+	fmt.Printf("OK: backfilled qr_token_hash for %d legacy visitors\n", backfilled)
 }
 
 func stripSQLComments(block string) string {

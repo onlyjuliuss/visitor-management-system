@@ -4,17 +4,26 @@ import "time"
 
 // Visitor represents a row in the visitors table.
 type Visitor struct {
-	ID          int        `json:"id"`
-	FullName    string     `json:"full_name"`
-	Phone       string     `json:"phone"`
-	Email       string     `json:"email"`
-	Purpose     string     `json:"purpose"`
-	HostName    string     `json:"host_name"`
-	SignInTime  time.Time  `json:"sign_in_time"`
-	SignOutTime *time.Time `json:"sign_out_time,omitempty"` // nil until signed out
-	PhotoURL    string     `json:"photo_url"`
-	QRCode      string     `json:"qr_code"`
-	Status      string     `json:"status"` // "in" or "out"
+	ID                  int        `json:"id"`
+	FullName            string     `json:"full_name"`
+	Phone               string     `json:"phone"`
+	Email               string     `json:"email"`
+	Purpose             string     `json:"purpose"`
+	HostName            string     `json:"host_name"`
+	SignInTime          time.Time  `json:"sign_in_time"`
+	SignOutTime         *time.Time `json:"sign_out_time,omitempty"` // nil until signed out
+	PhotoURL            string     `json:"photo_url"`
+	QRCode              string     `json:"qr_code"`
+	QRTokenHash         string     `json:"qr_token_hash,omitempty"`
+	QRExpiresAt         *time.Time `json:"qr_expires_at,omitempty"`
+	QRLastScannedAt     *time.Time `json:"qr_last_scanned_at,omitempty"`
+	QRRevoked           bool       `json:"qr_revoked"`
+	QRScanCount         int        `json:"qr_scan_count"`
+	RiskScore           int        `json:"risk_score"`
+	RiskLevel           string     `json:"risk_level"`
+	RiskReasons         []string   `json:"risk_reasons"`
+	LastRiskEvaluatedAt *time.Time `json:"last_risk_evaluated_at,omitempty"`
+	Status              string     `json:"status"` // "in" or "out"
 }
 
 // VisitorSignInRequest is what the frontend sends when a visitor signs in.

@@ -189,6 +189,10 @@ function SignOutPage() {
       let message = 'Invalid QR code. No active visitor was found.'
       if (rawError.includes('already signed out')) {
         message = 'This visitor is already signed out.'
+      } else if (rawError.includes('qr token expired')) {
+        message = 'This QR pass has expired. Please use admin sign-out by ID.'
+      } else if (rawError.includes('qr token revoked')) {
+        message = 'This QR pass has already been revoked. Use admin sign-out by ID.'
       } else if (rawError.includes('not found')) {
         message = 'This QR code does not match any active visitor.'
       } else if (rawError.includes('network')) {

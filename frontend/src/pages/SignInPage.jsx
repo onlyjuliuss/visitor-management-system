@@ -242,12 +242,22 @@ function SignInPage() {
       }
 
       const visitor = await response.json()
+      const successVisitor = {
+        id: visitor.id,
+        fullName: visitor.full_name,
+        hostName: visitor.host_name,
+        purpose: visitor.purpose,
+        signInTime: visitor.sign_in_time,
+        qrCode: visitor.qr_code,
+        qrExpiresAt: visitor.qr_expires_at ?? null,
+        status: visitor.status ?? 'in'
+      }
       // Refresh visitor list in context (safe even if not yet mounted).
       try {
         if (fetchAllVisitors) await fetchAllVisitors()
       } catch (_) {}
       // Navigate to success page with the visitor ID from the backend response
-      navigate(`/sign-in/success/${visitor.id}`)
+      navigate(`/sign-in/success/${visitor.id}`, { state: { visitor: successVisitor } })
     } catch (err) {
       setError('Failed to connect to server: ' + err.message)
       setLoading(false)

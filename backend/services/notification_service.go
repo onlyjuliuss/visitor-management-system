@@ -58,9 +58,20 @@ func (ns *NotificationService) SendSignOutReminders() error {
 		// Send SMS reminder
 		if err := SendSignOutReminder(visitor.Phone); err != nil {
 			log.Printf("[NOTIFICATION] Failed to send reminder to %s (%s): %v", visitor.FullName, visitor.Phone, err)
+			if logErr := LogVisitorEvent(ns.ctx, "reminder.send.failed", visitor.ID, "warning", "scheduled sign-out reminder failed", map[string]interface{}{
+				"phone": visitor.Phone,
+				"error": err.Error(),
+			}); logErr != nil {
+				log.Printf("[ACTIVITY] Failed to persist reminder failure activity log: %v", logErr)
+			}
 		} else {
 			log.Printf("[NOTIFICATION] Reminder sent to %s (%s)", visitor.FullName, visitor.Phone)
 			remindersSent++
+			if logErr := LogVisitorEvent(ns.ctx, "reminder.send.success", visitor.ID, "info", "scheduled sign-out reminder sent", map[string]interface{}{
+				"phone": visitor.Phone,
+			}); logErr != nil {
+				log.Printf("[ACTIVITY] Failed to persist reminder success activity log: %v", logErr)
+			}
 		}
 	}
 

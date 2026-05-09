@@ -1,154 +1,369 @@
+/* Digital Visitor Pass – public success page */
+
 .sign-in-success-page {
   min-height: 100vh;
-  padding: 2rem;
-  background: linear-gradient(to bottom, #fef2f2, #ffffff);
+  padding: clamp(1rem, 4vw, 2rem);
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(220, 38, 38, 0.12), transparent 50%),
+    linear-gradient(165deg, #0f172a 0%, #1e293b 35%, #0f172a 100%);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding-top: clamp(1.25rem, 5vh, 2.5rem);
+  padding-bottom: 2rem;
 }
 
-.success-container {
-  background: white;
-  border-radius: 12px;
-  padding: 3rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  max-width: 600px;
+.pass-page-inner {
   width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.25rem;
+}
+
+.pass-brand-outside {
+  align-self: center;
+  opacity: 0.95;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+}
+
+/* ---- Lost state (refresh / no route state) ---- */
+.pass-lost-state {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: clamp(1.5rem, 4vw, 2rem);
+  color: #e2e8f0;
   text-align: center;
 }
 
-.success-brand-logo {
-  margin-bottom: 1rem;
-}
-
-.success-icon {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #d1fae5;
-  border-radius: 50%;
-}
-
-.success-icon svg {
-  width: 50px;
-  height: 50px;
-}
-
-.success-container h1 {
-  font-size: 2rem;
+.pass-lost-state h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.35rem;
   font-weight: 700;
-  color: #1f2937;
-  margin: 0 0 1rem 0;
+  color: #f8fafc;
 }
 
-.success-message {
-  font-size: 1rem;
-  color: #6b7280;
-  margin: 0 0 2rem 0;
+.pass-lost-state p {
+  margin: 0 0 0.75rem;
+  line-height: 1.55;
+  font-size: 0.95rem;
+  color: #cbd5e1;
 }
 
-.visitor-info {
-  background: #f9fafb;
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
+.pass-lost-hint {
+  font-size: 0.9rem !important;
+  color: #94a3b8 !important;
+}
+
+.pass-lost-state .pass-btn {
+  margin: 0.35rem;
+}
+
+/* ---- Pass card ---- */
+.digital-pass {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 20px;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 25px 50px -12px rgba(0, 0, 0, 0.45),
+    0 0 80px -20px rgba(220, 38, 38, 0.15);
+  overflow: hidden;
   text-align: left;
 }
 
-.info-item {
+.digital-pass-header {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 0.75rem 1rem;
+  padding: 1.25rem 1.35rem;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #334155 100%);
+  border-bottom: 3px solid #dc2626;
 }
 
-.info-item:last-child {
-  border-bottom: none;
-}
-
-.info-item .label {
-  font-size: 0.875rem;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-.info-item .value {
-  font-size: 0.875rem;
-  color: #1f2937;
+.digital-pass-kicker {
+  display: block;
+  font-size: 0.65rem;
   font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 0.15rem;
 }
 
-.qr-code-container {
-  margin-bottom: 2rem;
+.digital-pass-title {
+  margin: 0;
+  font-size: clamp(1rem, 4vw, 1.2rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #f8fafc;
 }
 
-.qr-code-container h3 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 1rem 0;
-}
-
-.qr-code-wrapper {
-  background: white;
-  padding: 1.5rem;
+.pass-status-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.45rem 0.7rem;
   border-radius: 8px;
-  border: 2px solid #e5e7eb;
-  display: inline-block;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.pass-status-badge--active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.45);
+}
+
+.pass-status-badge--expiring_soon {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.pass-status-badge--expired {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+}
+
+.pass-status-badge--signed_out {
+  background: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.digital-pass-body {
+  padding: 1.35rem 1.35rem 1.15rem;
+}
+
+.pass-identity {
+  margin-bottom: 1.1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+.pass-name {
+  margin: 0 0 0.85rem;
+  font-size: clamp(1.35rem, 5vw, 1.65rem);
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.pass-meta {
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.pass-meta div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.pass-meta dt {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pass-meta dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.pass-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
   margin-bottom: 1rem;
 }
 
-.qr-instruction {
-  font-size: 0.875rem;
-  color: #6b7280;
-  margin: 0;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-}
-
-.primary-button {
-  background: #dc2626;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 0.75rem 2rem;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.primary-button:hover {
-  background: #b91c1c;
-}
-
-.secondary-button {
-  background: white;
-  color: #1f2937;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 0.75rem 2rem;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.secondary-button:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
-}
-
-@media print {
-  .action-buttons {
-    display: none;
+@media (max-width: 380px) {
+  .pass-times {
+    grid-template-columns: 1fr;
   }
 }
 
+.pass-times > div {
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.pass-times-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.pass-times-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pass-fallback-note {
+  font-size: 0.68rem;
+  color: #64748b;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.pass-countdown-block {
+  text-align: center;
+  padding: 0.85rem;
+  margin-bottom: 1.1rem;
+  background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+}
+
+.pass-countdown-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #991b1b;
+  margin-bottom: 0.35rem;
+}
+
+.pass-countdown-value {
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+  font-size: clamp(1.75rem, 7vw, 2.25rem);
+  font-weight: 700;
+  color: #b91c1c;
+  letter-spacing: 0.04em;
+}
+
+.pass-qr-section {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.pass-qr-frame {
+  display: inline-block;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 16px;
+  border: 2px solid #e2e8f0;
+  box-shadow: inset 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.pass-qr-missing {
+  margin: 2rem;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.pass-staff-instruction {
+  margin: 0.85rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.pass-security-note {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #475569;
+  background: #f8fafc;
+  border-radius: 10px;
+  border-left: 3px solid #dc2626;
+}
+
+.pass-security-note strong {
+  color: #0f172a;
+}
+
+.pass-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: center;
+}
+
+.pass-btn {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.7rem 1.35rem;
+  border-radius: 10px;
+  border: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pass-btn:active {
+  transform: scale(0.98);
+}
+
+.pass-btn-primary {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);
+}
+
+.pass-btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(220, 38, 38, 0.42);
+}
+
+.pass-btn-secondary {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.pass-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.pass-btn-ghost {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.pass-btn-ghost:hover {
+  color: #e2e8f0;
+  border-color: rgba(226, 232, 240, 0.45);
+}
+
+@media print {
+  .sign-in-success-page {
+    background: #fff;
+    padding: 0;
+  }
+
+  .pass-brand-outside,
+  .pass-actions,
+  .no-print {
+    display: none !important;
+  }
+
+  .pass-page-inner {
+    max-width: none;
+  }
+
+  .digital-pass {
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+}

@@ -38,6 +38,17 @@ function AdminSidebar() {
           </svg>
           {!isCollapsed && <span>Dashboard</span>}
         </div>
+
+        <div 
+          className={`nav-item ${isActive('/admin/command-centre') ? 'active' : ''}`}
+          onClick={() => navigate('/admin/command-centre')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L4 5V11C4 14.09 7.01 17.93 12 21C16.99 17.93 20 14.09 20 11V5L12 2Z" stroke={isActive('/admin/command-centre') ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="12" cy="11" r="3" stroke={isActive('/admin/command-centre') ? 'white' : 'currentColor'} strokeWidth="2"/>
+          </svg>
+          {!isCollapsed && <span>Command Centre</span>}
+        </div>
         
         <div 
           className={`nav-item ${isActive('/admin/visitors') ? 'active' : ''}`}
@@ -73,6 +84,17 @@ function AdminSidebar() {
             <path d="M12 20H5C4.46957 20 3.96086 19.7893 3.58579 19.4142C3.21071 19.0391 3 18.5304 3 18V6C3 5.46957 3.21071 4.96086 3.58579 4.58579C3.96086 4.21071 4.46957 4 5 4H12" stroke={isActive('/admin/sign-out-desk') ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
           {!isCollapsed && <span>Sign-out Desk</span>}
+        </div>
+
+        <div 
+          className={`nav-item ${isActive('/admin/security') ? 'active' : ''}`}
+          onClick={() => navigate('/admin/security')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L4 5V11C4 16.5 7.5 21.5 12 23C16.5 21.5 20 16.5 20 11V5L12 2Z" stroke={isActive('/admin/security') ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M9 12L11 14L15 10" stroke={isActive('/admin/security') ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {!isCollapsed && <span>Security Ops</span>}
         </div>
 
         <div 
